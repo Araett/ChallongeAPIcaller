@@ -65,7 +65,6 @@ def main():
     account_name, apiKey, url = (cred.replace('\n', '') for cred in creds)
     challonge.set_credentials(account_name, apiKey)
 
-    root = ET.Element("CurrentStatus")
 
     tournament = challonge.tournaments.show(url)
     playedMatches = 0
@@ -79,6 +78,7 @@ def main():
     participants = challonge.participants.index(tournament["id"])
     matches = challonge.matches.index(tournament["id"])
 
+    root = ET.Element("CurrentStatus")
     while True:
         print("Getting open matches.")
         openMatches = get_two_open_matches(matches)
@@ -89,7 +89,7 @@ def main():
         ET.SubElement(activeM, "Player1", name=activeMatch[0])
         ET.SubElement(activeM, "Player2", name=activeMatch[1])
 
-        nextM = ET.SubElement(root, "Next Match")
+        nextM = ET.SubElement(root, "NextMatch")
         nextMatch = get_active_players(openMatches[1], participants)
         ET.SubElement(nextM, "Player1", name=nextMatch[0])
         ET.SubElement(nextM, "Player2", name=nextMatch[1])
