@@ -59,12 +59,38 @@ def sort_this(matches):
 #         return [curmatch, match]
 
 
+def make_next_match_etree(
+        matches: List[dict],
+        participants: List[dict],
+        tournament: dict,
+) -> ET.ElementTree:
+    root = ET.Element("CurrentStatus")
+    print("Getting open matches.")
+    active_match, next_match = get_two_open_matches(matches)
+    ET.SubElement(root, "TournamentName", name=tournament["name"])
+    active_match_elem = ET.SubElement(root, "ActiveMatch")
+    active_pl_1, active_pl_2 = get_active_players(
+        match=active_match,
+        participants=participants,
+    )
+    ET.SubElement(active_match_elem, "Player1", name=active_pl_1)
+    ET.SubElement(active_match_elem, "Player2", name=active_pl_2)
+    next_match_elem = ET.SubElement(root, "NextMatch")
+    next_pl_1, next_pl_2 = get_active_players(
+        match=next_match,
+        participants=participants,
+    )
+    ET.SubElement(next_match_elem, "Player1", name=next_pl_1)
+    ET.SubElement(next_match_elem, "Player2", name=next_pl_2)
+    tree = ET.ElementTree(root)
+    return tree
+
+
 def main():
     with open('cred.txt') as f:
         creds = f.readlines()
     account_name, apiKey, url = (cred.replace('\n', '') for cred in creds)
     challonge.set_credentials(account_name, apiKey)
-
 
     tournament = challonge.tournaments.show(url)
     playedMatches = 0
@@ -75,27 +101,12 @@ def main():
         time.sleep(2)
         continue
     print("Tournament found!")
+
     participants = challonge.participants.index(tournament["id"])
     matches = challonge.matches.index(tournament["id"])
-
-    root = ET.Element("CurrentStatus")
     while True:
-        print("Getting open matches.")
-        openMatches = get_two_open_matches(matches)
-        ET.SubElement(root, "TournamentName", name=tournament["name"])
-        print(get_max_rounds(matches))
-        activeM = ET.SubElement(root, "ActiveMatch")
-        activeMatch = get_active_players(openMatches[0], participants)
-        ET.SubElement(activeM, "Player1", name=activeMatch[0])
-        ET.SubElement(activeM, "Player2", name=activeMatch[1])
-
-        nextM = ET.SubElement(root, "NextMatch")
-        nextMatch = get_active_players(openMatches[1], participants)
-        ET.SubElement(nextM, "Player1", name=nextMatch[0])
-        ET.SubElement(nextM, "Player2", name=nextMatch[1])
-
+        tree = make_next_match_etree(matches, participants, tournament)
         print("Matches parsed. Writing to file.")
-        tree = ET.ElementTree(root)
         tree.write("matches.xml")
         print("Done!")
         time.sleep(5)
