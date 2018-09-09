@@ -5,7 +5,7 @@ name = "pypi"
 
 [packages]
 pychal = "*"
-challongeapicaller = {editable = true, path = "."}
+# challongeapicaller = {editable = true, path = "."}
 
 [dev-packages]
 pytest = "*"
