@@ -1,50 +1,52 @@
-#Challonge API caller and parser v0.2
-#Made by Martynas Saulius
-#martynas575@gmail.com00
+from operator import itemgetter
+import time
+import sys
+import xml.etree.ElementTree as ET
+from typing import List
 
 import challonge
-import time
-import xml.etree.ElementTree as ET
-import sys
 
 
-def get_max_rounds(matches):
-    rounds = 0
-    for match in matches:
-        if rounds < abs(match["round"]):
-            rounds = abs(match["round"])
-    return rounds
+def get_max_rounds(matches: List[dict]) -> int:
+    rounds = map(itemgetter('round'), matches)
+    return max(map(abs, rounds))
 
 
-def get_active_players(match, participants):
-    player1 = "None"
-    player2 = "None"
-    for part in participants:
-        if match["player1_id"] == part["id"]:
-            player1 = part["name"]
-            continue
-        if match["player2_id"] == part["id"]:
-            player2 = part["name"]
-            continue
-    return [player1, player2]
+def get_active_players(match: dict, participants: List[dict]) -> [str, str]:
+    participant_id_to_name_map = {
+        part['id']: part['name']
+        for part
+        in participants
+    }
+    return [
+        participant_id_to_name_map[match["player1_id"]],
+        participant_id_to_name_map[match["player2_id"]],
+    ]
 
 
-def get_two_open_matches(matches):
-    maxRounds = get_max_rounds(matches)
-    for r in range(1, maxRounds):
+def get_two_open_matches(matches: List[dict]) -> [dict, dict]:
+    max_rounds = get_max_rounds(matches)
+    for round_ in range(1, max_rounds):
         for match in matches:
-            if abs(match["round"]) != r:
+            if abs(match["round"]) != round_:
                 continue 
             if match["state"] != "open":
                 continue
-            for nextmatch in matches:
-                if nextmatch is match:
+            for next_match in matches:
+                if next_match is match:
                     continue
-                if nextmatch["state"] != "open":
+                if next_match["state"] != "open":
                     continue
-                if abs(nextmatch["round"]) != r:
+                if abs(next_match["round"]) != round_:
                     continue 
-                return [match, nextmatch] 
+                return [match, next_match]
+
+
+def sort_this(matches):
+    def keyfunc(item):
+        # `pending` is after `open` which is what we need in `state`.
+        return abs(item['round']), item['state'], item['id']
+    return list(sorted(matches, key=keyfunc))
 
 
 # def get_next_match(currentActive, matches):
@@ -58,21 +60,10 @@ def get_two_open_matches(matches):
 
 
 def main():
-
-    credentialsFile = open("cred.txt", "r")
-
-    accountName = credentialsFile.readline()
-    accountName = accountName.replace('\n', '')
-
-    apiKey = credentialsFile.readline()
-    apiKey = apiKey.replace('\n', '')
-
-    url = credentialsFile.readline()
-    url = url.replace('\n', '')
-
-    credentialsFile.close()
-
-    challonge.set_credentials(accountName, apiKey)
+    with open('cred.txt') as f:
+        creds = f.readlines()
+    account_name, apiKey, url = (cred.replace('\n', '') for cred in creds)
+    challonge.set_credentials(account_name, apiKey)
 
     root = ET.Element("CurrentStatus")
 
