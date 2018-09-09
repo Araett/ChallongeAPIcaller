@@ -1,7 +1,7 @@
-from operator import itemgetter
+import json
 import time
-import sys
 import xml.etree.ElementTree as ET
+from operator import itemgetter
 from typing import List
 
 import challonge
@@ -87,17 +87,15 @@ def make_next_match_etree(
 
 
 def main():
-    with open('cred.txt') as f:
-        creds = f.readlines()
-    account_name, apiKey, url = (cred.replace('\n', '') for cred in creds)
-    challonge.set_credentials(account_name, apiKey)
-
-    tournament = challonge.tournaments.show(url)
-    playedMatches = 0
+    with open('creds.json') as f:
+        creds = json.loads(f.read())
+    challonge.set_credentials(creds['username'], creds['APIKey'])
+    tournament_name = creds['tournamentName']
+    tournament = challonge.tournaments.show(tournament_name)
 
     print("Awaiting tournament...")
     while tournament["started_at"] == None:
-        tournament = challonge.tournaments.show(sys.argv[1])
+        tournament = challonge.tournaments.show(tournament_name)
         time.sleep(2)
         continue
     print("Tournament found!")
