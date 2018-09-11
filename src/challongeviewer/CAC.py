@@ -130,7 +130,11 @@ def make_next_match_etree(
     matches = sort_this(matches)
     matches = filter_completed_matches(matches)
     active_match = find_next_open_match(matches)
-    next_match = find_next_open_match(matches, int(active_match["suggested_play_order"]))
+    try:
+        next_match = find_next_open_match(matches, int(active_match["suggested_play_order"]))
+    except TypeError:
+        print("Is this HungryBox's reset?")
+        next_match = None
     root = make_element_tree_element_with_player_info(
         tournament, 
         active_match, 
@@ -174,17 +178,21 @@ def main():
         creds = json.loads(f.read())
     challonge.set_credentials(creds['username'], creds['APIKey'])
     tournament_name = creds['tournamentName']
-    tournament = challonge.tournaments.show(tournament_name)
+    first_time_flag = True 
     
-    print("Awaiting tournament...")
-    while tournament["started_at"] == None:
-        tournament = challonge.tournaments.show(tournament_name)
-        time.sleep(2)
-        continue
-    
-    print("Tournament found!")
-   
     while True:
+        tournament = challonge.tournaments.show(tournament_name)
+        if first_time_flag:
+            print("Awaiting tournament...")
+            while tournament["started_at"] == None:
+                tournament = challonge.tournaments.show(tournament_name)
+                time.sleep(2)
+                continue
+            first_time_flag = False
+            print("Tournament found!")
+        if tournament["progress_meter"] == 100:
+            print("Tournament is over. Thank you for using.")
+            break
         params = get_and_parse_custom_parameters()
         if params["ACPN"].upper() == "TRUE":
             tree = make_next_match_etree_with_custom_parameters(tournament, params)
