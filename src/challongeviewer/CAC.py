@@ -6,6 +6,29 @@ from typing import List
 
 import challonge
 
+def get_and_parse_custom_parameters() -> dict: 
+    params = {}
+    try:
+        with open('matchparam.json') as p:
+            raw_params = json.loads(p.read())
+        params["ACPN"] = raw_params.get("AreCustomParametersNeeded", "No")
+        if params["ACPN"].upper() not in ("YES", "NO"):
+            params["ACPN"] = "No"
+        try:
+            params["MatchNo1"] = int(raw_params.get("MatchNo1", 0))
+        except ValueError:
+            params["MatchNo1"] = 0
+        
+        try:
+            params["MatchNo2"] = int(raw_params.get("MatchNo2", 0))
+        except ValueError:
+            params["MatchNo2"] = 0
+            
+    except OSError:
+        print("No matchparam.json wes found, or editing wasn't finished.")
+        params["ACPN"] = "No"
+    return params
+
 
 def get_max_rounds(matches: List[dict]) -> int:
     rounds = map(itemgetter('round'), matches)
@@ -26,20 +49,19 @@ def get_active_players(match: dict, participants: List[dict]) -> [str, str]:
 
 def get_two_open_matches(matches: List[dict]) -> [dict, dict]:
     max_rounds = get_max_rounds(matches)
-    for round_ in range(1, max_rounds):
-        for match in matches:
-            if abs(match["round"]) != round_:
-                continue 
-            if match["state"] != "open":
+    for match in matches:
+        if match["state"] != "open":
+            continue
+        for next_match in matches:
+            if next_match is match:
                 continue
-            for next_match in matches:
-                if next_match is match:
-                    continue
-                if next_match["state"] != "open":
-                    continue
-                if abs(next_match["round"]) != round_:
-                    continue 
-                return [match, next_match]
+            if next_match["state"] != "open":
+                continue
+            return [match, next_match]
+
+def remove_completed_matches(matches) -> List[dict]:
+    sorted_matches = [match for match in matches if match['state'] != 'completed']
+    return sorted_matches
 
 
 def sort_this(matches):
@@ -58,15 +80,13 @@ def sort_this(matches):
 #             continue
 #         return [curmatch, match]
 
-
-def make_next_match_etree(
-        matches: List[dict],
-        participants: List[dict],
-        tournament: dict,
-) -> ET.ElementTree:
+def make_element_tree_element_with_player_info(
+    tournament: dict,
+    active_match: dict,
+    next_match: dict,
+) -> ET.Element:
     root = ET.Element("CurrentStatus")
-    print("Getting open matches.")
-    active_match, next_match = get_two_open_matches(matches)
+    participants = challonge.participants.index(tournament["id"])
     ET.SubElement(root, "TournamentName", name=tournament["name"])
     active_match_elem = ET.SubElement(root, "ActiveMatch")
     active_pl_1, active_pl_2 = get_active_players(
@@ -82,7 +102,62 @@ def make_next_match_etree(
     )
     ET.SubElement(next_match_elem, "Player1", name=next_pl_1)
     ET.SubElement(next_match_elem, "Player2", name=next_pl_2)
+    return root
+
+def make_next_match_etree(
+        tournament: dict,
+) -> ET.ElementTree:
+    root = ET.Element("CurrentStatus")
+    print("No custom parameters found, parameter file was invalid or both match numbers are invalid.")
+    print("Getting open matches.")
+    matches = challonge.matches.index(tournament["id"])
+    matches = sort_this(matches)
+    matches = remove_completed_matches(matches)
+    active_match, next_match = get_two_open_matches(matches)
+    root = make_element_tree_element_with_player_info(tournament, active_match, next_match)
     tree = ET.ElementTree(root)
+    return tree
+
+
+def get_given_match(
+    matches: List[dict],
+    MatchNo: int,
+) -> dict:
+    for match_ in matches:
+        if int(match_["suggested_play_order"]) == MatchNo:
+            return match_
+
+
+def find_next_open_match(
+    matches: List[dict],
+    MatchNo: int,
+) -> dict:
+    for match_ in matches:
+        if match_['state'] == 'open' and match_["suggested_play_order"] != MatchNo:
+            return match_
+
+def make_next_match_etree_with_custom_parameters(
+        tournament: dict,
+        parameters: dict,
+) -> ET.ElementTree:
+    print("Custom parameters file found with parameters:")
+    print(parameters)
+    if parameters["MatchNo1"] == 0 and parameters["MatchNo2"] == 0:
+        tree = make_next_match_etree(tournament)
+    else:
+        matches = challonge.matches.index(tournament["id"])
+        matches = sort_this(matches)
+        if parameters["MatchNo1"] != 0:
+            active_match = get_given_match(matches, parameters["MatchNo1"])
+        else:
+            active_match = find_next_open_match(matches, parameters["MatchNo2"])
+        if parameters["MatchNo2"] != 0:
+            next_match = get_given_match(matches, parameters["MatchNo2"])
+        else:
+            next_match = find_next_open_match(matches, parameters["MatchNo1"])
+        
+        root = make_element_tree_element_with_player_info(tournament, active_match, next_match)
+        tree = ET.ElementTree(root)
     return tree
 
 
@@ -92,18 +167,21 @@ def main():
     challonge.set_credentials(creds['username'], creds['APIKey'])
     tournament_name = creds['tournamentName']
     tournament = challonge.tournaments.show(tournament_name)
-
+    
     print("Awaiting tournament...")
     while tournament["started_at"] == None:
         tournament = challonge.tournaments.show(tournament_name)
         time.sleep(2)
         continue
+    
     print("Tournament found!")
-
-    participants = challonge.participants.index(tournament["id"])
-    matches = challonge.matches.index(tournament["id"])
+   
     while True:
-        tree = make_next_match_etree(matches, participants, tournament)
+        params = get_and_parse_custom_parameters()
+        if params["ACPN"].upper() == "YES":
+            tree = make_next_match_etree_with_custom_parameters(tournament, params)
+        else:
+            tree = make_next_match_etree(tournament)
         print("Matches parsed. Writing to file.")
         tree.write("matches.xml")
         print("Done!")
