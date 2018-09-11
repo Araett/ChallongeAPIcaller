@@ -1,5 +1,5 @@
 {
-	"AreCustomParametersNeeded" : "Yes or No",
-	"MatchNo1" : "match number here or empty",
-	"MatchNo2" : "match number here or empty"
+	"AreCustomParametersNeeded": "true/false",
+	"MatchNo1": "1-(maximum match count) or empty",
+	"MatchNo2": "1-(maximum match count) or empty"
 }

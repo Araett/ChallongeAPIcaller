@@ -11,9 +11,9 @@ def get_and_parse_custom_parameters() -> dict:
     try:
         with open('matchparam.json') as p:
             raw_params = json.loads(p.read())
-        params["ACPN"] = raw_params.get("AreCustomParametersNeeded", "No")
-        if params["ACPN"].upper() not in ("YES", "NO"):
-            params["ACPN"] = "No"
+        params["ACPN"] = raw_params.get("AreCustomParametersNeeded", "false")
+        if params["ACPN"].upper() not in ("TRUE", "FALSE"):
+            params["ACPN"] = "false"
         try:
             params["MatchNo1"] = int(raw_params.get("MatchNo1", 0))
         except ValueError:
@@ -26,7 +26,7 @@ def get_and_parse_custom_parameters() -> dict:
             
     except OSError:
         print("No matchparam.json wes found, or editing wasn't finished.")
-        params["ACPN"] = "No"
+        params["ACPN"] = "false"
     return params
 
 
@@ -47,38 +47,42 @@ def get_active_players(match: dict, participants: List[dict]) -> [str, str]:
     ]
 
 
-def get_two_open_matches(matches: List[dict]) -> [dict, dict]:
-    max_rounds = get_max_rounds(matches)
-    for match in matches:
-        if match["state"] != "open":
-            continue
-        for next_match in matches:
-            if next_match is match:
-                continue
-            if next_match["state"] != "open":
-                continue
-            return [match, next_match]
-
-def remove_completed_matches(matches) -> List[dict]:
-    sorted_matches = [match for match in matches if match['state'] != 'completed']
-    return sorted_matches
+def filter_completed_matches(matches: List[dict]) -> List[dict]:
+    filtered_matches = [
+        match for match in matches if match['state'] != 'completed'
+    ]
+    return filtered_matches
 
 
-def sort_this(matches):
+def sort_this(matches: List[dict]) -> List[dict]:
     def keyfunc(item):
         # `pending` is after `open` which is what we need in `state`.
         return abs(item['round']), item['state'], item['id']
     return list(sorted(matches, key=keyfunc))
 
 
-# def get_next_match(currentActive, matches):
-#     curmatch = matches[int(currentActive) - 1]
-#     for match in matches:
-#         if match["state"] != "open":
-#             continue
-#         elif match is curmatch:
-#             continue
-#         return [curmatch, match]
+def get_given_match(
+    matches: List[dict],
+    MatchNo: int,
+) -> dict:
+    for match_ in matches:
+        if int(match_["suggested_play_order"]) == MatchNo:
+            return match_
+    return find_next_open_match(matches)
+
+
+def find_next_open_match(
+    matches: List[dict],
+    skip_sugg_play_order_no=0,
+) -> dict:
+    for match_ in matches:
+        if (
+            match_['state'] == 'open' 
+            and match_["suggested_play_order"] != skip_sugg_play_order_no
+        ):
+            return match_
+    return None
+
 
 def make_element_tree_element_with_player_info(
     tournament: dict,
@@ -89,52 +93,52 @@ def make_element_tree_element_with_player_info(
     participants = challonge.participants.index(tournament["id"])
     ET.SubElement(root, "TournamentName", name=tournament["name"])
     active_match_elem = ET.SubElement(root, "ActiveMatch")
-    active_pl_1, active_pl_2 = get_active_players(
-        match=active_match,
-        participants=participants,
-    )
+    if active_match:
+        active_pl_1, active_pl_2 = get_active_players(
+            match=active_match,
+            participants=participants,
+        )
+    else:
+        print("""No more open matches were found.""")
+        active_pl_1 = "null"
+        active_pl_2 = "null"
     ET.SubElement(active_match_elem, "Player1", name=active_pl_1)
     ET.SubElement(active_match_elem, "Player2", name=active_pl_2)
     next_match_elem = ET.SubElement(root, "NextMatch")
-    next_pl_1, next_pl_2 = get_active_players(
-        match=next_match,
-        participants=participants,
-    )
+    if next_match:
+        next_pl_1, next_pl_2 = get_active_players(
+            match=next_match,
+            participants=participants,
+        )
+    else:
+        print("Next match was not found.")
+        next_pl_1 = "null"
+        next_pl_2 = "null"
     ET.SubElement(next_match_elem, "Player1", name=next_pl_1)
     ET.SubElement(next_match_elem, "Player2", name=next_pl_2)
+    print("Active Match: " + active_pl_1 + " vs. " + active_pl_2)
+    print("Next Match: " + next_pl_1 + " vs. " + next_pl_2)
     return root
+
 
 def make_next_match_etree(
         tournament: dict,
 ) -> ET.ElementTree:
     root = ET.Element("CurrentStatus")
-    print("No custom parameters found, parameter file was invalid or both match numbers are invalid.")
     print("Getting open matches.")
     matches = challonge.matches.index(tournament["id"])
     matches = sort_this(matches)
-    matches = remove_completed_matches(matches)
-    active_match, next_match = get_two_open_matches(matches)
-    root = make_element_tree_element_with_player_info(tournament, active_match, next_match)
+    matches = filter_completed_matches(matches)
+    active_match = find_next_open_match(matches)
+    next_match = find_next_open_match(matches, int(active_match["suggested_play_order"]))
+    root = make_element_tree_element_with_player_info(
+        tournament, 
+        active_match, 
+        next_match
+    )
     tree = ET.ElementTree(root)
     return tree
 
-
-def get_given_match(
-    matches: List[dict],
-    MatchNo: int,
-) -> dict:
-    for match_ in matches:
-        if int(match_["suggested_play_order"]) == MatchNo:
-            return match_
-
-
-def find_next_open_match(
-    matches: List[dict],
-    MatchNo: int,
-) -> dict:
-    for match_ in matches:
-        if match_['state'] == 'open' and match_["suggested_play_order"] != MatchNo:
-            return match_
 
 def make_next_match_etree_with_custom_parameters(
         tournament: dict,
@@ -156,7 +160,11 @@ def make_next_match_etree_with_custom_parameters(
         else:
             next_match = find_next_open_match(matches, parameters["MatchNo1"])
         
-        root = make_element_tree_element_with_player_info(tournament, active_match, next_match)
+        root = make_element_tree_element_with_player_info(
+            tournament, 
+            active_match, 
+            next_match
+        )
         tree = ET.ElementTree(root)
     return tree
 
@@ -178,13 +186,13 @@ def main():
    
     while True:
         params = get_and_parse_custom_parameters()
-        if params["ACPN"].upper() == "YES":
+        if params["ACPN"].upper() == "TRUE":
             tree = make_next_match_etree_with_custom_parameters(tournament, params)
         else:
             tree = make_next_match_etree(tournament)
         print("Matches parsed. Writing to file.")
         tree.write("matches.xml")
-        print("Done!")
+        print("Done! Refreshing in 5 seconds.\n")
         time.sleep(5)
 
 
