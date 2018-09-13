@@ -27,9 +27,7 @@ bash:
 Windows:
 	Run CAC.exe
 	
-matchparam.json is a file to control the flow of the script by searching games via given suggested play order::
-	{
-	"AreCustomParametersNeeded": "true/false",
-	"MatchNo1": "1-(maximum match count) or empty",
-	"MatchNo2": "1-(maximum match count) or empty"
-	}
+Custom parameters
+-----------------
+	
+matchparam.json is a file to control the flow of the script by searching games via given suggested play order.
