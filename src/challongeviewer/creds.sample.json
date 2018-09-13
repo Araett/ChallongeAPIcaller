@@ -1,7 +1,7 @@
 {
   "username": "here",
   "APIKey": "your_key",
-  "tournamentName": "tourname_name"
+  "tournamentURL": "https://challonge.com/<This goes here>"
 }
 
 

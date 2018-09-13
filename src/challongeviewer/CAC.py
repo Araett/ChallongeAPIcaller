@@ -177,15 +177,15 @@ def main():
     with open('creds.json') as f:
         creds = json.loads(f.read())
     challonge.set_credentials(creds['username'], creds['APIKey'])
-    tournament_name = creds['tournamentName']
+    tournament_url = creds['tournamentURL']
     first_time_flag = True 
     
     while True:
-        tournament = challonge.tournaments.show(tournament_name)
+        tournament = challonge.tournaments.show(tournament_url)
         if first_time_flag:
             print("Awaiting tournament...")
             while tournament["started_at"] == None:
-                tournament = challonge.tournaments.show(tournament_name)
+                tournament = challonge.tournaments.show(tournament_url)
                 time.sleep(2)
                 continue
             first_time_flag = False
